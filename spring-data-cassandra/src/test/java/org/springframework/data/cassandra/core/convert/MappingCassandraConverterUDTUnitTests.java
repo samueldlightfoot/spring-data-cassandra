@@ -42,16 +42,10 @@ import org.springframework.core.convert.converter.Converter;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.annotation.ReadOnlyProperty;
 import org.springframework.data.cassandra.core.StatementFactory;
+import org.springframework.data.cassandra.core.cql.PrimaryKeyType;
 import org.springframework.data.cassandra.core.cql.WriteOptions;
 import org.springframework.data.cassandra.core.cql.util.StatementBuilder;
-import org.springframework.data.cassandra.core.mapping.CassandraMappingContext;
-import org.springframework.data.cassandra.core.mapping.CassandraPersistentEntity;
-import org.springframework.data.cassandra.core.mapping.CassandraType;
-import org.springframework.data.cassandra.core.mapping.Embedded;
-import org.springframework.data.cassandra.core.mapping.Frozen;
-import org.springframework.data.cassandra.core.mapping.Table;
-import org.springframework.data.cassandra.core.mapping.UserDefinedType;
-import org.springframework.data.cassandra.core.mapping.UserTypeResolver;
+import org.springframework.data.cassandra.core.mapping.*;
 import org.springframework.data.cassandra.support.UserDefinedTypeBuilder;
 import org.springframework.data.cassandra.test.util.RowMockUtil;
 
@@ -242,14 +236,13 @@ class MappingCassandraConverterUDTUnitTests {
 	void shouldWriteUdtWhereWherePrimaryKeyWithCustomConversion() {
 
 		Money money = new Money();
-		money.setCurrency(new Currency("EUR"));
+		money.setKey(new Money.MoneyKey());
+		money.getKey().setCurrency(new Currency("EUR"));
+		money.getKey().setOther("other");
 
 		Where where = new Where();
+		// Will fail with Cannot resolve DataType for com.datastax.oss.driver.api.core.data.UdtValue
 		converter.write(money, where);
-
-		assertThat((UdtValue) where.get(CqlIdentifier.fromCql("currency"))) //
-				.extracting(UdtValue::getFormattedContents) //
-				.isEqualTo("{currency:'EUR'}");
 	}
 
 	@Test // DATACASS-172, DATACASS-400
@@ -582,8 +575,21 @@ class MappingCassandraConverterUDTUnitTests {
 	@Data
 	@Table
 	public static class Money {
-		@Id private Currency currency;
+
+		@PrimaryKeyClass
+		@Data
+		public static class MoneyKey {
+			@PrimaryKeyColumn(type = PrimaryKeyType.PARTITIONED)
+			public Currency currency;
+			@PrimaryKeyColumn(type = PrimaryKeyType.CLUSTERED)
+			public String other;
+		}
+
+		@PrimaryKey
+		public MoneyKey key;
+
 	}
+
 
 	@Table
 	@AllArgsConstructor
